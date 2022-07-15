@@ -2,6 +2,10 @@
 #ifndef _3DSINPUT_H
 #define _3DSINPUT_H
 
+void initIRED();
+void input3dsScanInputForEmulation2P();
+u16 input3dsGetCurrentKeysHeld2P();
+
 //---------------------------------------------------------
 // Reads and processes Joy Pad buttons.
 //

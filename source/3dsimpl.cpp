@@ -32,6 +32,8 @@
 #include "3dsimpl_gpu.h"
 #include "lodepng.h"
 
+#include "inputRedirect.h"
+
 // Compiled shaders
 //
 #include "shaderfast_shbin.h"
@@ -43,7 +45,6 @@
 #include "shaderslow2_shbin.h"
 #include "shaderslow3_shbin.h"
 #include "shaderslowm7_shbin.h"
-
 
 //------------------------------------------------------------------------
 // Memory Usage = 0.26 MB   for 4-point rectangle (triangle strip) vertex buffer
@@ -113,16 +114,16 @@ void impl3dsShowSecondScreenMessage(const char *message) {
 	int x0 = bounds[B_DLEFT];
 	int y0 = bounds[B_DTOP];
 	int x1 = bounds[B_DRIGHT];
-	int y1 = bounds[B_DBOTTOM];   
-	
+	int y1 = bounds[B_DBOTTOM];
+
 	if (settings3DS.SecondScreenContent == CONTENT_IMAGE && ui3dsScreenImageRendered()) {
 		// ui3dsDrawRect() might overlap prior dialog which results in false dialog alpha value
 		ui3dsUpdateScreenBuffer(screenSettings.SecondScreen, true);
 	} else
 		ui3dsDrawRect(x0, y0, x1, y1, 0x111111);
-	
+
 	ui3dsDrawStringWithWrapping(x0 + padding, y0 + padding, x1 - padding, y1 - padding, 0xffffff, HALIGN_LEFT, message);
-     	
+
 }
 
 bool impl3dsLoadBorderTexture(const char *imgFilePath, float alpha = 1.0)
@@ -149,7 +150,7 @@ bool impl3dsLoadBorderTexture(const char *imgFilePath, float alpha = 1.0)
 				pow2Tex[pow2TexPos + 3] = (((u8*) src)[dataPos] * (int)(alpha * 255)) >> 8;
 			}
 		}
-		
+
 		GSPGPU_FlushDataCache(pow2Tex, pow2Width * pow2Height * 3);
 
 		borderTexture = gpu3dsCreateTextureInVRAM(pow2Width, pow2Height, GPU_RGBA8);
@@ -159,7 +160,7 @@ bool impl3dsLoadBorderTexture(const char *imgFilePath, float alpha = 1.0)
 		GX_TRANSFER_OUT_FORMAT((u32) GPU_RGBA8) | GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
 
 		gspWaitForPPF();
-		
+
 		free(src);
 		linearFree(pow2Tex);
 		return true;
@@ -170,7 +171,7 @@ bool impl3dsLoadBorderTexture(const char *imgFilePath, float alpha = 1.0)
 //---------------------------------------------------------
 // Initializes the emulator core.
 //
-// You must call snd3dsSetSampleRate here to set 
+// You must call snd3dsSetSampleRate here to set
 // the CSND's sampling rate.
 //---------------------------------------------------------
 bool impl3dsInitializeCore()
@@ -364,7 +365,7 @@ void impl3dsFinalize()
     gpu3dsDeallocVertexList(&GPU3DSExt.quadVertexes);
     gpu3dsDeallocVertexList(&GPU3DSExt.tileVertexes);
     gpu3dsDeallocVertexList(&GPU3DSExt.mode7LineVertexes);
-	
+
 	// Frees up all textures.
 	//
     gpu3dsDestroyTextureFromLinearMemory(snesTileCacheTexture);
@@ -389,13 +390,13 @@ void impl3dsFinalize()
     printf("S9xDeinitAPU:\n");
 #endif
     S9xDeinitAPU();
-    
+
 #ifndef RELEASE
     printf("Memory.Deinit:\n");
 #endif
     Memory.Deinit();
 
-	
+
 }
 
 
@@ -436,12 +437,12 @@ void impl3dsOutputSoundSamples(short *leftSamples, short *rightSamples)
 void impl3dsSetBorderImage(bool imageFileUpdated) {
 	if (!settings3DS.ShowGameBorder) {
 		return;
-	} 
+	}
 
 	bool alphaChanged, imgFilePathChanged;
 	const char *imgFilePath;
 	float alpha = (float)(settings3DS.GameBorderOpacity) / OPACITY_STEPS;
-	
+
 	alphaChanged = borderTextureAlpha != alpha;
 
 	// return if alpha of current game border hasn't changed
@@ -460,12 +461,12 @@ void impl3dsSetBorderImage(bool imageFileUpdated) {
 		if (imgFilePathChanged)
 			borderFile = std::string(imgFilePath);
 	}
-	
+
 	if (!imgFilePathChanged && !alphaChanged) return;
-	
+
 	if (borderTexture)
 		gpu3dsDestroyTextureFromVRAM(borderTexture);
-		
+
 	if(!impl3dsLoadBorderTexture(borderFile.c_str(), borderTextureAlpha))
 		borderTexture = gpu3dsCreateTextureInVRAM(SCREEN_IMAGE_WIDTH, SCREEN_HEIGHT, GPU_RGBA8);
 }
@@ -476,6 +477,7 @@ void impl3dsSetBorderImage(bool imageFileUpdated) {
 //---------------------------------------------------------
 bool impl3dsLoadROM(char *romFilePath)
 {
+  initIRED();
     bool loaded = Memory.LoadROM(romFilePath);
 
 	if(loaded) {
@@ -493,7 +495,7 @@ bool impl3dsLoadROM(char *romFilePath)
 
         // ensure controller is always set to player 1 when rom has loaded
         Settings.SwapJoypads = 0;
-    	
+
 		gpu3dsInitializeMode7Vertexes();
     	gpu3dsCopyVRAMTilesIntoMode7TileVertexes(Memory.VRAM);
     	cache3dsInit();
@@ -508,6 +510,7 @@ bool impl3dsLoadROM(char *romFilePath)
 //---------------------------------------------------------
 void impl3dsResetConsole()
 {
+  initIRED();
 	S9xReset();
 	cache3dsInit();
 	gpu3dsInitializeMode7Vertexes();
@@ -525,7 +528,7 @@ void impl3dsPrepareForNewFrame()
     gpu3dsSwapVertexListForNextFrame(&GPU3DSExt.quadVertexes);
     gpu3dsSwapVertexListForNextFrame(&GPU3DSExt.tileVertexes);
     gpu3dsSwapVertexListForNextFrame(&GPU3DSExt.rectangleVertexes);
-    gpu3dsSwapVertexListForNextFrame(&GPU3DSExt.mode7LineVertexes);	
+    gpu3dsSwapVertexListForNextFrame(&GPU3DSExt.mode7LineVertexes);
 }
 
 
@@ -580,21 +583,21 @@ void impl3dsRunOneFrame(bool firstFrame, bool skipDrawingFrame)
 	gpu3dsDisableAlphaBlending();
 	gpu3dsDisableDepthTest();
 	gpu3dsDisableAlphaTest();
-	
+
 	if(settings3DS.ShowGameBorder == 1 && borderTexture)
 	{
 		// Copy the border texture  to the 3DS frame
 		gpu3dsBindTexture(borderTexture, GPU_TEXUNIT0);
 		gpu3dsSetTextureEnvironmentReplaceTexture0();
 		gpu3dsDisableStencilTest();
-		
+
 		int bx0 = (screenSettings.GameScreenWidth - SCREEN_IMAGE_WIDTH) / 2;
 		int bx1 = bx0 + SCREEN_IMAGE_WIDTH;
 		gpu3dsAddQuadVertexes(bx0, 0, bx1, SCREEN_HEIGHT, 0, 0, SCREEN_IMAGE_WIDTH, SCREEN_HEIGHT, 0.1f);
-	
+
 		gpu3dsDrawVertexes();
 	}
-	
+
 	gpu3dsBindTextureMainScreen(GPU_TEXUNIT0);
 	gpu3dsSetTextureEnvironmentReplaceTexture0();
 	gpu3dsDisableStencilTest();
@@ -624,8 +627,8 @@ void impl3dsRunOneFrame(bool firstFrame, bool skipDrawingFrame)
 
 	gpu3dsAddQuadVertexes(
 		sx0, sy0, sx1, sy1,
-		settings3DS.CropPixels, settings3DS.CropPixels ? settings3DS.CropPixels : 1, 
-		256 - settings3DS.CropPixels, PPU.ScreenHeight - settings3DS.CropPixels, 
+		settings3DS.CropPixels, settings3DS.CropPixels ? settings3DS.CropPixels : 1,
+		256 - settings3DS.CropPixels, PPU.ScreenHeight - settings3DS.CropPixels,
 		0.1f);
 	gpu3dsDrawVertexes();
 
@@ -674,7 +677,7 @@ void impl3dsRunOneFrame(bool firstFrame, bool skipDrawingFrame)
 
 	S9xPrintAPUState ();
 	printf ("----\n");*/
-	
+
 }
 
 
@@ -714,7 +717,7 @@ bool impl3dsSaveStateSlot(int slotNumber)
 
 		impl3dsUpdateSlotState(slotNumber, false, true);
 	}
-	
+
 	return success;
 }
 
@@ -744,10 +747,10 @@ bool impl3dsLoadStateSlot(int slotNumber)
 		// reset last slot
 		if (settings3DS.CurrentSaveSlot != slotNumber && settings3DS.CurrentSaveSlot > 0)
 			impl3dsUpdateSlotState(settings3DS.CurrentSaveSlot);
-			
+
 		impl3dsUpdateSlotState(slotNumber, false, true);
 	}
-	
+
 	return success;
 }
 
@@ -768,7 +771,7 @@ bool impl3dsLoadState(const char* filename)
 }
 
 
-void impl3dsSaveLoadMessage(bool saveMode, saveLoad_state saveLoadState) 
+void impl3dsSaveLoadMessage(bool saveMode, saveLoad_state saveLoadState)
 {
     char s[64];
 
@@ -799,12 +802,12 @@ void impl3dsQuickSaveLoad(bool saveMode) {
 
 	if (settings3DS.CurrentSaveSlot <= 0)
 		settings3DS.CurrentSaveSlot = 1;
-		
+
 	snd3DS.generateSilence = true;
 	impl3dsSaveLoadMessage(saveMode, SAVELOAD_IN_PROGRESS);
-	
+
 	bool success = saveMode ? impl3dsSaveStateSlot(settings3DS.CurrentSaveSlot) : impl3dsLoadStateSlot(settings3DS.CurrentSaveSlot);
-	
+
 	impl3dsSaveLoadMessage(saveMode, success ? SAVELOAD_SUCCEEDED : SAVELOAD_FAILED);
 	snd3DS.generateSilence = false;
 }
@@ -818,14 +821,14 @@ void impl3dsUpdateSlotState(int slotNumber, bool newRomLoaded, bool saved) {
         slotStates[slotNumber - 1] = RADIO_ACTIVE_CHECKED;
         return;
     }
-	
+
 	// IsFileExists check necessary after new ROM has loaded
 	if (newRomLoaded) {
     	char s[_MAX_PATH];
     	sprintf(s, "save.%d.frz", slotNumber);
    	 	slotStates[slotNumber - 1] = IsFileExists(S9xGetGameFolder(s)) ? RADIO_ACTIVE : RADIO_INACTIVE;
 	}
-	
+
 	if (slotNumber == settings3DS.CurrentSaveSlot || !newRomLoaded) {
 		 switch (slotStates[slotNumber - 1])
         {
@@ -849,8 +852,8 @@ void impl3dsSelectSaveSlot(int direction) {
 	// reset last slot
 	if (settings3DS.CurrentSaveSlot > 0)
 		impl3dsUpdateSlotState(settings3DS.CurrentSaveSlot);
-	
-	if (direction == 1) 
+
+	if (direction == 1)
 		settings3DS.CurrentSaveSlot = settings3DS.CurrentSaveSlot % SAVESLOTS_MAX + 1;
 	else
 		settings3DS.CurrentSaveSlot = settings3DS.CurrentSaveSlot <= 1 ? SAVESLOTS_MAX : settings3DS.CurrentSaveSlot - 1;
@@ -874,7 +877,7 @@ void impl3dsSwapJoypads() {
 
 bool impl3dsTakeScreenshot(const char*& path, bool menuOpen) {
 	if (snd3DS.generateSilence || secondScreenDialog.State != HIDDEN) return false;
-	
+
 	snd3DS.generateSilence = true;
 
 	if (!menuOpen)
@@ -899,7 +902,7 @@ bool impl3dsTakeScreenshot(const char*& path, bool menuOpen) {
 	if (path) {
 		success = menu3dsTakeScreenshot(path);
 	}
-	
+
 	snd3DS.generateSilence = false;
 
 	if (menuOpen)
@@ -911,10 +914,10 @@ bool impl3dsTakeScreenshot(const char*& path, bool menuOpen) {
 		snprintf(message, 600, "Done! File saved to %s", path);
 	else
 		snprintf(message, 600, "Oops. Unable to take screenshot!", path);
-	
+
 	impl3dsShowSecondScreenMessage(message);
 	secondScreenDialog.State = VISIBLE;
-	
+
 	return success;
 }
 
@@ -1010,7 +1013,7 @@ void S9xAutoSaveSRAM (void)
     // like we did prior to v0.61
     //
     snd3DS.generateSilence = true;
-	
+
 	Memory.SaveSRAM (S9xGetGameFolder("rom.srm"));
 
     // Bug fix: Instead of starting CSND, we continue to mix
@@ -1166,8 +1169,32 @@ uint32 prevConsoleJoyPad = 0;
 u32 prevConsoleButtonPressed[10];
 u32 buttons3dsPressed[10];
 
+uint32 S9xReadJoypadIRED (void) {
+  u32 consoleJoyPad = 0;
+
+  u16 keysHeldIRED = input3dsGetCurrentKeysHeld2P();
+
+  if (keysHeldIRED & IRED_UP) consoleJoyPad |= SNES_UP_MASK;
+  if (keysHeldIRED & IRED_DOWN) consoleJoyPad |= SNES_DOWN_MASK;
+  if (keysHeldIRED & IRED_LEFT) consoleJoyPad |= SNES_LEFT_MASK;
+  if (keysHeldIRED & IRED_RIGHT) consoleJoyPad |= SNES_RIGHT_MASK;
+
+  if (keysHeldIRED & IRED_A) consoleJoyPad |= SNES_A_MASK;
+  if (keysHeldIRED & IRED_B) consoleJoyPad |= SNES_B_MASK;
+  if (keysHeldIRED & IRED_X) consoleJoyPad |= SNES_X_MASK;
+  if (keysHeldIRED & IRED_Y) consoleJoyPad |= SNES_Y_MASK;
+  if (keysHeldIRED & IRED_L) consoleJoyPad |= SNES_TL_MASK;
+  if (keysHeldIRED & IRED_R) consoleJoyPad |= SNES_TR_MASK;
+
+  if (keysHeldIRED & IRED_START) consoleJoyPad |= SNES_START_MASK;
+  if (keysHeldIRED & IRED_SELECT) consoleJoyPad |= SNES_SELECT_MASK;
+
+  return consoleJoyPad;
+}
+
 uint32 S9xReadJoypad (int which1_0_to_4)
 {
+    if (which1_0_to_4 == 1) return S9xReadJoypadIRED();
     if (which1_0_to_4 != 0)
         return 0;
 
